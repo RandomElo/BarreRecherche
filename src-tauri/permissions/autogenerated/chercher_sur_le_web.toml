@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chercher-sur-le-web"
+description = "Enables the chercher_sur_le_web command without any pre-configured scope."
+commands.allow = ["chercher_sur_le_web"]
+
+[[permission]]
+identifier = "deny-chercher-sur-le-web"
+description = "Denies the chercher_sur_le_web command without any pre-configured scope."
+commands.deny = ["chercher_sur_le_web"]

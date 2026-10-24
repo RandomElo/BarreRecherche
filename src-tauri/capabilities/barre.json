@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "barre",
+  "description": "Fenêtre de la barre : sa taille, se cacher, ouvrir les réglages, lire l'état du raccourci, chercher, ouvrir un résultat, chercher sur le Web dans Firefox (peu trouvé, @web, @google), ouvrir une adresse tapée, son icône, la cible posée par Ctrl+K, rendre Ctrl+K Ctrl+O à VS Code, aperçu de la ligne active, cours et portefeuille de @bourse.",
+  "windows": ["barre"],
+  "permissions": ["allow-ajuster-taille", "allow-cacher-barre", "allow-ouvrir-reglages", "allow-etat-reglages", "allow-chercher", "allow-ouvrir", "allow-chercher-sur-le-web", "allow-ouvrir-site", "allow-icone", "allow-contexte-ouverture", "allow-relayer-ctrl-k-ctrl-o", "allow-apercu", "allow-apercu-pdf", "allow-bourse-chercher", "allow-bourse-apercu"]
+}

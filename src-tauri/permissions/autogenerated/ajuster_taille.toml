@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ajuster-taille"
+description = "Enables the ajuster_taille command without any pre-configured scope."
+commands.allow = ["ajuster_taille"]
+
+[[permission]]
+identifier = "deny-ajuster-taille"
+description = "Denies the ajuster_taille command without any pre-configured scope."
+commands.deny = ["ajuster_taille"]

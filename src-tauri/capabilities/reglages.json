@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "reglages",
+  "description": "Fenêtre des réglages : lire l'état, régler le démarrage avec la session, quitter.",
+  "windows": ["reglages"],
+  "permissions": ["allow-etat-reglages", "allow-definir-demarrage-auto", "allow-quitter"]
+}

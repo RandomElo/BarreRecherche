@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-relayer-ctrl-k-ctrl-o"
+description = "Enables the relayer_ctrl_k_ctrl_o command without any pre-configured scope."
+commands.allow = ["relayer_ctrl_k_ctrl_o"]
+
+[[permission]]
+identifier = "deny-relayer-ctrl-k-ctrl-o"
+description = "Denies the relayer_ctrl_k_ctrl_o command without any pre-configured scope."
+commands.deny = ["relayer_ctrl_k_ctrl_o"]

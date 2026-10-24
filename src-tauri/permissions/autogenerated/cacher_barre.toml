@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cacher-barre"
+description = "Enables the cacher_barre command without any pre-configured scope."
+commands.allow = ["cacher_barre"]
+
+[[permission]]
+identifier = "deny-cacher-barre"
+description = "Denies the cacher_barre command without any pre-configured scope."
+commands.deny = ["cacher_barre"]

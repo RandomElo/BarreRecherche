@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-quitter"
+description = "Enables the quitter command without any pre-configured scope."
+commands.allow = ["quitter"]
+
+[[permission]]
+identifier = "deny-quitter"
+description = "Denies the quitter command without any pre-configured scope."
+commands.deny = ["quitter"]

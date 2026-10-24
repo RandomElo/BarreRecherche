@@ -1,0 +1,48 @@
+{
+  "name": "barre-recherche",
+  "version": "0.7.18",
+  "private": true,
+  "type": "module",
+  "description": "Barre de recherche du poste, à la manière de Spotlight",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:vite": "vite",
+    "build:vite": "tsc && vite build",
+    "package": "tauri build --bundles appimage",
+    "installer": "bash scripts/install-local.sh",
+    "transfert": "bash scripts/transfert.sh",
+    "memoire": "bash scripts/memoire.sh",
+    "icones": "tauri icon src-tauri/icons/icone.svg -p 32,128,256,512",
+    "typecheck": "tsc",
+    "lint": "eslint . && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && node scripts/check-map.mjs",
+    "test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "version:set": "node scripts/set-version.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.2",
+    "lucide-react": "^1.55.0",
+    "pdfjs-dist": "6.3.289",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

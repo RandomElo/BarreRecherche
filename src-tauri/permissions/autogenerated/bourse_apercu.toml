@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bourse-apercu"
+description = "Enables the bourse_apercu command without any pre-configured scope."
+commands.allow = ["bourse_apercu"]
+
+[[permission]]
+identifier = "deny-bourse-apercu"
+description = "Denies the bourse_apercu command without any pre-configured scope."
+commands.deny = ["bourse_apercu"]

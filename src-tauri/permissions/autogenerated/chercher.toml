@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chercher"
+description = "Enables the chercher command without any pre-configured scope."
+commands.allow = ["chercher"]
+
+[[permission]]
+identifier = "deny-chercher"
+description = "Denies the chercher command without any pre-configured scope."
+commands.deny = ["chercher"]

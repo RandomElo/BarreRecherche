@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apercu-pdf"
+description = "Enables the apercu_pdf command without any pre-configured scope."
+commands.allow = ["apercu_pdf"]
+
+[[permission]]
+identifier = "deny-apercu-pdf"
+description = "Denies the apercu_pdf command without any pre-configured scope."
+commands.deny = ["apercu_pdf"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-contexte-ouverture"
+description = "Enables the contexte_ouverture command without any pre-configured scope."
+commands.allow = ["contexte_ouverture"]
+
+[[permission]]
+identifier = "deny-contexte-ouverture"
+description = "Denies the contexte_ouverture command without any pre-configured scope."
+commands.deny = ["contexte_ouverture"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-definir-demarrage-auto"
+description = "Enables the definir_demarrage_auto command without any pre-configured scope."
+commands.allow = ["definir_demarrage_auto"]
+
+[[permission]]
+identifier = "deny-definir-demarrage-auto"
+description = "Denies the definir_demarrage_auto command without any pre-configured scope."
+commands.deny = ["definir_demarrage_auto"]

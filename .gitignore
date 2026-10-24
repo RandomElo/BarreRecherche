@@ -1,0 +1,43 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.log
+npm-debug.log*
+
+# Rust et Tauri
+target/
+src-tauri/gen/
+
+# Paquets construits
+release/
+*.AppImage
+
+# Bases locales
+*.sqlite
+*.sqlite3
+*.db
+
+# Éditeurs et système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Rapports d'audit
+audits/
+
+# Configuration Claude
+.claude/
+
+# Documents de travail
+docs/recettes/

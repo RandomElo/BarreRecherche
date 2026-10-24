@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+/* Charte de Notes : fond sombre, accent bleu (packages/ui/src/theme/defaults.ts de Notes). */
+@theme {
+  --color-fond: #16171b;
+  --color-surface: #1e2026;
+  --color-bordure: #2d3039;
+  --color-texte: #e6e7ea;
+  --color-discret: #9aa0ab;
+  --color-accent: #60a5fa;
+  --color-alerte: #e0af68;
+  /* Cours en hausse ou en baisse (@bourse). */
+  --color-hausse: #9ece6a;
+  --color-baisse: #f7768e;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html,
+body,
+#racine {
+  height: 100%;
+}
+
+/* Contrôles natifs (barres de défilement, cases) en sombre. */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-fond);
+  color: var(--color-texte);
+  font-family: var(--font-sans);
+}
