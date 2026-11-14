@@ -7,6 +7,7 @@ const COMMANDES: &[&str] = &[
     "etat_reglages",
     "definir_demarrage_auto",
     "quitter",
+    "redemarrer",
     "chercher",
     "ouvrir",
     "chercher_sur_le_web",

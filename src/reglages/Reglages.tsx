@@ -1,4 +1,4 @@
-import { Check, Power } from 'lucide-react';
+import { Check, Power, RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { avertissementRaccourci } from '../lib/raccourci';
 import { systeme, type EtatReglages } from '../lib/systeme';
@@ -50,7 +50,7 @@ export function Reglages() {
               </span>
               <span>
                 Démarrer avec la session
-                <span className="text-discret block text-xs">Sans fenêtre : la barre est prête dès l'ouverture de session.</span>
+                <span className="text-discret block text-xs">Prête dès l'ouverture de session, relancée si elle plante.</span>
               </span>
             </label>
           )}
@@ -64,14 +64,24 @@ export function Reglages() {
 
       <div className="mt-auto flex items-center justify-between gap-3">
         <p className="text-discret text-xs">{libelleVersion(versionApplication)}</p>
-        <button
-          type="button"
-          onClick={() => void systeme.quitter()}
-          className="bg-texte/10 hover:bg-texte/20 focus-visible:bg-accent/40 inline-flex h-8 items-center gap-2 rounded-md px-3 font-medium outline-0"
-        >
-          <Power className="size-4" aria-hidden="true" />
-          Quitter la barre
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => systeme.redemarrer().catch((raison: unknown) => definirErreur(String(raison)))}
+            className="bg-texte/10 hover:bg-texte/20 focus-visible:bg-accent/40 inline-flex h-8 items-center gap-2 rounded-md px-3 font-medium outline-0"
+          >
+            <RotateCw className="size-4" aria-hidden="true" />
+            Redémarrer
+          </button>
+          <button
+            type="button"
+            onClick={() => void systeme.quitter()}
+            className="bg-texte/10 hover:bg-texte/20 focus-visible:bg-accent/40 inline-flex h-8 items-center gap-2 rounded-md px-3 font-medium outline-0"
+          >
+            <Power className="size-4" aria-hidden="true" />
+            Quitter
+          </button>
+        </div>
       </div>
     </main>
   );

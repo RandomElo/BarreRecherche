@@ -19,6 +19,20 @@ const DOSSIERS_EXCLUS: &[&str] = &[
     "coverage",
     "vendor",
 ];
+/// Dossiers cachés parcourus quand même, hors de la racine du dossier personnel : la configuration
+/// d'un projet, qu'Eloi ouvre (« @dossier .claude »). Les autres dossiers cachés sont des caches ou
+/// des données d'outils (`.git`, `.gradle`, `.expo`…) ; ceux de la racine (`~/.claude`, `~/.config`)
+/// aussi. Les fichiers cachés (`.env`) ne sont jamais indexés.
+const DOSSIERS_CACHES_GARDES: &[&str] = &[
+    ".claude",
+    ".github",
+    ".gitlab",
+    ".vscode",
+    ".idea",
+    ".devcontainer",
+    ".husky",
+    ".circleci",
+];
 /// Chemins exclus, relatifs au dossier personnel.
 const CHEMINS_EXCLUS: &[&str] = &["go/pkg"];
 /// Fichiers qui signalent un dossier généré, quel que soit son nom : cache (spécification
@@ -55,7 +69,11 @@ pub struct IndexFichiers {
 }
 
 fn est_exclu(nom: &str, chemin: &Path, racine: &Path, exclus: &[PathBuf]) -> bool {
-    if nom.starts_with('.') || DOSSIERS_EXCLUS.contains(&nom) || exclus.iter().any(|e| e == chemin)
+    let cache_garde =
+        DOSSIERS_CACHES_GARDES.contains(&nom) && chemin.parent().is_some_and(|p| p != racine);
+    if (nom.starts_with('.') && !cache_garde)
+        || DOSSIERS_EXCLUS.contains(&nom)
+        || exclus.iter().any(|e| e == chemin)
     {
         return true;
     }
@@ -96,6 +114,11 @@ impl IndexFichiers {
         };
         index.remplir(0, racine);
         index
+    }
+
+    /// Dossier parcouru (le dossier personnel).
+    pub fn racine(&self) -> &Path {
+        &self.racine
     }
 
     /// Nombre d'éléments indexés (le dossier personnel lui-même non compris).
@@ -371,6 +394,9 @@ mod tests {
             "Documents/cache-perso",
             "Documents/env-python/lib",
             ".config/app",
+            ".claude/projects",
+            "Documents/projet/.claude",
+            "Documents/projet/.git",
             "go/pkg/mod",
             "go/src",
         ] {
@@ -386,6 +412,10 @@ mod tests {
             "Documents/env-python/pyvenv.cfg",
             "Documents/.secret",
             ".config/app/rapport.toml",
+            ".claude/projects/consignes.jsonl",
+            "Documents/projet/.claude/consignes.md",
+            "Documents/projet/.claude/.consignes-locales",
+            "Documents/projet/.git/consignes",
             "go/pkg/mod/rapport.go",
             "go/src/main.go",
         ] {
@@ -428,6 +458,22 @@ mod tests {
         assert!(index.contient(&racine.path().join("Documents/projet/src/main.rs")));
         assert!(!index.contient(&racine.path().join("Documents/projet/target")));
         assert!(!index.contient(racine.path()));
+    }
+
+    #[test]
+    fn dossiers_caches_de_projet() {
+        let racine = arbre();
+        let index = IndexFichiers::construire(racine.path());
+        // `.claude` d'un projet oui, celui de la racine non, `.git` jamais, fichier caché jamais.
+        assert_eq!(
+            noms(&index.chercher(&floue::preparer_saisie(".claude"), 50)),
+            [".claude"]
+        );
+        assert!(index.contient(&racine.path().join("Documents/projet/.claude")));
+        assert_eq!(
+            noms(&index.chercher(&floue::preparer_saisie("consignes"), 50)),
+            ["consignes.md"]
+        );
     }
 
     #[test]

@@ -189,6 +189,11 @@ impl Cibles {
         Ok(cibles)
     }
 
+    /// Au moins une cible est posée.
+    pub fn posees(&self) -> bool {
+        self.logiciel.is_some() || self.genre.is_some()
+    }
+
     /// Avec la catégorie nommée par la page, l'une de `SECTIONS`.
     pub fn dans(mut self, section: Option<&str>) -> Result<Self, String> {
         self.section = match section {

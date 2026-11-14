@@ -117,6 +117,7 @@ const PERMISSIONS: &[(&str, &[&str])] = &[
             "allow-etat-reglages",
             "allow-definir-demarrage-auto",
             "allow-quitter",
+            "allow-redemarrer",
         ],
     ),
 ];

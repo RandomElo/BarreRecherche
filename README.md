@@ -8,8 +8,9 @@ Pour Linux Mint, bureau Cinnamon, session X11. Le programme est une AppImage aut
 
 - Les applications, comme le menu de Cinnamon (« navigateur » trouve Firefox).
 - Les pages de Notes, par leur titre, avec leur icône et leur emplacement (les pages parentes).
-- Les fichiers et dossiers du dossier personnel, sans les dossiers cachés ni ce qui est généré (`node_modules`, `target`, `venv`…). L'index se tient à jour tout seul.
+- Les fichiers et dossiers du dossier personnel, sans les fichiers cachés ni ce qui est généré (`node_modules`, `target`, `venv`…). Parmi les dossiers cachés, seuls ceux de configuration d'un projet sont gardés (`.claude`, `.github`, `.vscode`…), pas ceux du dossier personnel lui-même. L'index se tient à jour tout seul.
 - Les marque-pages et l'historique de Firefox, une ligne par site, les plus visités devant.
+- Mes skills de Claude Code : « skills claude » ouvre une page locale (recherche, détail au clic, copie de la commande). Elle liste `~/.claude/skills` et se met à jour à chaque ouverture de la barre.
 - Les cours de la Bourse et le portefeuille, avec `@bourse` (facultatif, voir l'installation).
 
 La recherche ignore les accents et la casse, et les lettres n'ont pas besoin de se suivre. Les résultats sont rangés en sections : Applications, Notes, Dossiers, Fichiers, Marque-pages, Historique.
@@ -77,7 +78,7 @@ La première construction prend une dizaine de minutes, les suivantes deux ou tr
 ~/Applications/BarreRecherche.AppImage
 ```
 
-La barre s'affiche. Cliquer sur l'engrenage au bout du champ, puis cocher « Démarrer avec la session » : la barre sera lancée en fond, cachée, à chaque ouverture de session.
+La barre s'affiche. Cliquer sur l'engrenage au bout du champ, puis cocher « Démarrer avec la session » : la barre sera lancée en fond, cachée, à chaque ouverture de session, par un service de la session : relancée si elle plante, et si elle plante en boucle, le menu Windows est rendu et une notification le dit.
 
 `Ctrl+K` ouvre ensuite la barre de n'importe où.
 
@@ -117,15 +118,14 @@ L'AppImage contient les réglages du `.env`, dont la clé de `@bourse` : ce doss
 
 Mettre à jour, après un changement du code ou du `.env` :
 
-1. quitter la barre : engrenage, puis « Quitter la barre ». Une barre lancée garde l'ancienne version tant qu'elle n'est pas relancée ;
-2. `npm run installer` ;
-3. relancer la barre depuis le menu de Cinnamon (« Barre de recherche »), ou `~/Applications/BarreRecherche.AppImage --fond`, ou fermer puis rouvrir la session.
+1. `npm run installer` ;
+2. engrenage, puis « Redémarrer » (ou « Quitter », puis la relancer depuis le menu de Cinnamon, « Barre de recherche »). Une barre lancée garde l'ancienne version tant qu'elle n'est pas relancée.
 
 Désinstaller :
 
-1. engrenage, décocher « Démarrer avec la session », puis « Quitter la barre » ;
+1. engrenage, décocher « Démarrer avec la session », puis « Quitter » ;
 2. supprimer `~/Applications/BarreRecherche.AppImage`, et, si elle a été installée par `installer.sh`, `~/.local/share/applications/barre-recherche.desktop` ;
-3. pour ne rien laisser : supprimer `~/.config/BarreRecherche/` (éléments récents) et `~/.cache/BarreRecherche/` (copie de la base de Firefox).
+3. pour ne rien laisser : supprimer `~/.config/BarreRecherche/` (éléments récents) et `~/.cache/BarreRecherche/` (copie de la base de Firefox, page des skills).
 
 La barre n'écrit nulle part ailleurs, et jamais dans les fichiers qu'elle cherche.
 
@@ -133,46 +133,50 @@ La barre n'écrit nulle part ailleurs, et jamais dans les fichiers qu'elle cherc
 
 | Touche | Effet |
 |---|---|
-| `Ctrl+K` | ouvre la barre, sans cible posée |
-| taper | cherche partout, résultats rangés en sections |
+| `Ctrl+K` | ouvre la barre, sans filtre ; depuis Notes, avec le filtre Notes |
+| loupe de Notes ou `Ctrl+Maj+F` dans Notes | ouvre aussi la barre avec le filtre Notes (Notes lance la barre avec `--cible=notes`) |
+| taper | cherche partout : le meilleur résultat en tête, puis toujours les mêmes sections dans le même ordre |
+| taper le début d'un filtre (`vs`, `dos`, `no`) | le filtre est proposé en première ligne, mais la ligne choisie est le meilleur résultat : `Entrée` ouvre le logiciel, `Tab` pose le filtre |
 | `↑` `↓` | change de ligne, l'aperçu suit |
-| `Tab` / `Maj+Tab` | section suivante ou précédente ; pendant que le premier mot se tape (`vs`, `lo`), complète le nom de cible ou `logiciels` montré en grisé, suivi de « filtre … Tab » ; sans `Tab` ni espace, le dernier mot reste une recherche (`dossier vsc` cherche « vsc » parmi les dossiers) |
-| `Entrée` | ouvre la ligne ; sur « Plus de résultats », montre toute la section |
+| `Tab` / `Maj+Tab` | pose le filtre proposé ; sinon entre dans le dossier actif (il devient une étiquette) ; sinon section suivante ou précédente (`Maj+Tab` ne fait que ça) |
+| `Entrée` | ouvre la ligne ; sur un filtre ou « Plus de résultats », pose le filtre ; avec un logiciel posé (`vsc`), un dossier en étiquette et le champ vide, ouvre ce dossier dans le logiciel |
+| `Windows` (Super) seule | ouvre la barre, comme `Ctrl+K` ; sur la barre ouverte, la ferme ; avec une autre touche (`Super+E`) elle ne fait rien. Tant que la barre tourne, le raccourci du menu de Cinnamon est vidé (applet du menu, réglage `overlay-key`) ; quand elle s'arrête (Quitter, ou plantages en boucle), il est rendu et la touche Windows rouvre le menu. Vider aussi `gsettings set org.cinnamon.muffin overlay-key ''` |
 | `→` sur un dossier ou une page de Notes | entre dedans (contenu du dossier, sous-pages de la page) ; `←` remonte |
-| champ vide, `↓` puis `Entrée` | choisit une catégorie et ne cherche plus que dedans |
-| `logiciel ` | tes logiciels (Analyse bancaire, Notes…), ceux présents sur ce poste ; `Entrée` en démarre un |
-| `@` | propose les cibles (tableau ci-dessous) ; on peut aussi taper le nom sans `@` en tête du champ, suivi d'une espace (`vsc `) |
-| `Entrée` quand rien n'est trouvé | cherche le texte sur le Web, dans un onglet de Firefox (avec peu de résultats, la ligne est en bas de la liste) ; une adresse tapée (`github.com`) s'ouvre directement |
-| `Retour arrière` champ vide | remonte d'un dossier, sinon quitte la catégorie, sinon retire la dernière cible |
+| champ vide | les filtres de genre (Récents, Logiciels, Applications, Notes, Dossiers…), `Entrée` en pose un |
+| champ vide avec un filtre posé | tout ce que le filtre ouvre (Notes : tes pages ; VS Code : les dossiers ouverts récemment dans VS Code ; Dossiers : ton dossier personnel) |
+| dernière ligne | « Rechercher sur le Web » dès qu'un texte est tapé, dans un onglet de Firefox ; une adresse tapée (`github.com`) s'ouvre directement |
+| `Retour arrière` champ vide | retire la dernière étiquette (dossier parcouru, puis filtre) |
 | `Échap` | cache la barre |
 
-Les cibles choisissent le logiciel qui ouvre le résultat, ou le genre de résultat gardé. Un logiciel et un genre peuvent être posés ensemble (`@vsc @fichier`). `@vsc` et `@terminal` seuls ne montrent que des dossiers.
+Un filtre garde un genre de résultat, ou choisit le logiciel qui l'ouvre. Un genre et un logiciel vont ensemble (VS Code et Fichiers). VS Code et Terminal seuls ne montrent que des dossiers. Un filtre se pose aussi en tapant son nom suivi d'une espace (`vsc rapport`), ou par `@` (`@ter rapport`, `rapport @vsc`).
 
-| Cible | Effet |
+| Filtre (noms à taper) | Effet |
 |---|---|
-| `@vsc` ou `code` | ouvre le dossier dans VS Code (un fichier avec `@fichier`) |
-| `@terminal` ou `ghostty` | ouvre un terminal dans le dossier (Ghostty, sinon le terminal de Cinnamon) |
-| `@firefox` | pages de Firefox, fichiers HTML et PDF, ouverts dans Firefox |
-| `@notes` | seulement les pages de Notes, ouvertes dans Notes |
-| `@fichier` | seulement les fichiers |
-| `@dossier` | seulement les dossiers |
-| `@bourse` | le portefeuille, ou le cours d'une action : gain de la journée et courbe du jour |
-| `@web` (ou `recherche`) | rien sur le poste : `Entrée` cherche le texte sur le Web, dans un onglet de Firefox, avec son moteur par défaut |
-| `@google` (ou `chrome`) | pareil, sur Google, dans Google Chrome |
+| Récents, Logiciels, Applications | ce que tu as ouvert dernièrement, tes logiciels, les applications du poste |
+| Notes (`notes`) | seulement les pages de Notes, ouvertes dans Notes |
+| Dossiers (`dossier`), Fichiers (`fichier`) | seulement les dossiers, ou les fichiers |
+| Marque-pages (`favoris`), Historique | pages de Firefox |
+| VS Code (`vsc`, `code`) | ouvre le dossier dans VS Code (un fichier avec Fichiers) |
+| Terminal (`terminal`, `ghostty`) | ouvre un terminal dans le dossier (Ghostty, sinon le terminal de Cinnamon) |
+| Firefox (`firefox`) | pages de Firefox, fichiers HTML et PDF, ouverts dans Firefox |
+| Bourse (`bourse`) | le portefeuille, ou le cours d'une action : gain de la journée et courbe du jour |
+| Web (`web`, `recherche`) | les pages de Firefox, puis `Entrée` cherche le texte sur le Web, dans un onglet de Firefox, avec son moteur par défaut |
+| Google (`google`, `chrome`) | pareil, sur Google, dans Google Chrome |
 
 Exemples :
 
-- `vsc rapport` : les dossiers « rapport », ouverts dans VS Code ;
-- `@ter projet` : un terminal ouvert dans le dossier « projet » (une cible abrégée suivie d'une espace suffit) ;
+- `vs`, `Entrée`, `rapport` : les dossiers « rapport », ouverts dans VS Code ;
+- `@ter projet` : un terminal ouvert dans le dossier « projet » ;
 - `@firefox linkedin` : LinkedIn, depuis les marque-pages ou l'historique ;
-- `@notes correctifs` : la page « Correctifs » de Notes ;
-- `@bourse alstom` : le cours d'Alstom, ce qu'il a gagné ou perdu aujourd'hui, et sa courbe.
+- `notes correctifs` : la page « Correctifs » de Notes ;
+- `bourse alstom` : le cours d'Alstom, ce qu'il a gagné ou perdu aujourd'hui, et sa courbe.
 
 `Ctrl+K` est pris sur tout le poste, mais les raccourcis en deux temps des logiciels marchent encore. `Ctrl` tenu après `K`, la touche suivante est rendue au logiciel : `Ctrl+K Ctrl+O` ouvre toujours un dossier dans VS Code, même tapé par une touche macro qui relâche `Ctrl` entre les deux. Dans VS Code, la barre s'ouvre donc 300 ms après `Ctrl+K`, le temps de voir si une seconde touche suit.
 
 ## En cas de problème
 
 - `Ctrl+K` n'ouvre rien : la barre tourne-t-elle (`pgrep -f BarreRecherche`) ? Sinon, la lancer depuis le menu de Cinnamon. Si `Ctrl+K` est pris par un raccourci de Cinnamon ou d'un autre programme, l'engrenage le dit : libérer le raccourci, puis relancer la barre.
+- La barre plante en boucle : après quatre plantages en deux minutes, le service s'arrête, le menu Windows est rendu et une notification le dit. Voir l'erreur : `journalctl --user -u barre-recherche.service`. Relancer : `systemctl --user reset-failed barre-recherche.service`, puis « Barre de recherche » dans le menu de Cinnamon.
 - La barre ne démarre pas : la lancer depuis un terminal, `~/Applications/BarreRecherche.AppImage`, pour lire les erreurs.
 - `@bourse` affiche un message en jaune : `.env` absent ou incomplet (puis `npm run installer`), clé refusée, ou API injoignable.
 - Session Wayland : non prise en charge, se connecter en X11.

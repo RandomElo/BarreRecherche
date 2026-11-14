@@ -1,7 +1,22 @@
-import { AppWindow, ChartLine, Code, File, Folder, Globe, type LucideIcon, NotebookText, Search, SquareTerminal } from 'lucide-react';
+import {
+  AppWindow,
+  Bookmark,
+  ChartLine,
+  Clock,
+  Code,
+  File,
+  Folder,
+  Globe,
+  History,
+  type LucideIcon,
+  NotebookText,
+  Rocket,
+  Search,
+  SquareTerminal,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { systeme, type Resultat } from '../lib/systeme';
-import type { NomCible } from './cibles';
+import type { NomFiltre } from './filtres';
 
 /** Icônes déjà demandées, pour la durée de vie de la page : `null` quand il n'y en a pas. */
 const connues = new Map<string, string | null>();
@@ -29,17 +44,25 @@ export function useIcone(id: string, aDemander: boolean): string | null {
 }
 
 const parGenre: Record<Resultat['genre'], LucideIcon> = { application: AppWindow, fichier: File, dossier: Folder, page: Globe, note: NotebookText };
-const parCible: Record<NomCible, LucideIcon> = {
+const parFiltre: Record<NomFiltre, LucideIcon> = {
+  recents: Clock,
+  logiciels: Rocket,
+  applications: AppWindow,
+  notes: NotebookText,
+  dossiers: Folder,
+  fichiers: File,
+  'marque-pages': Bookmark,
+  historique: History,
   vsc: Code,
   terminal: SquareTerminal,
   firefox: Globe,
-  notes: NotebookText,
-  fichier: File,
-  dossier: Folder,
-  bourse: ChartLine,
   web: Search,
   google: Search,
+  bourse: ChartLine,
 };
+
+/** Filtres qui prennent l'icône d'un logiciel installé (`cible:<nom>` côté Rust). */
+const LOGICIEL_DU_FILTRE: Partial<Record<NomFiltre, string>> = { vsc: 'vsc', terminal: 'terminal', firefox: 'firefox', notes: 'notes', google: 'google' };
 
 /** Icône Lucide d'une page de Notes, une fois le module des icônes chargé ; l'icône simple d'ici là. */
 function IconeLucide({ nom, taille }: { nom: string; taille: string }) {
@@ -84,12 +107,13 @@ export function IconeResultat({ resultat, taille = 'size-5' }: { resultat: Resul
   );
 }
 
-/** Icône d'une cible : celle du logiciel installé (VS Code, Ghostty, Firefox), sinon une icône simple. */
-export function IconeCible({ nom, taille = 'size-5' }: { nom: NomCible; taille?: string }) {
-  const adresse = useIcone(`cible:${nom}`, true);
-  const ParDefaut = parCible[nom];
+/** Icône d'un filtre : celle du logiciel installé (VS Code, Ghostty, Firefox, Notes, Chrome), sinon une icône simple. */
+export function IconeFiltre({ nom, taille = 'size-5' }: { nom: NomFiltre; taille?: string }) {
+  const logiciel = LOGICIEL_DU_FILTRE[nom];
+  const adresse = useIcone(`cible:${logiciel ?? ''}`, logiciel !== undefined);
+  const ParDefaut = parFiltre[nom];
   return adresse === null ? (
-    <ParDefaut className={`text-discret ${taille} shrink-0`} aria-hidden="true" />
+    <ParDefaut className={`text-accent ${taille} shrink-0`} aria-hidden="true" />
   ) : (
     <img src={adresse} alt="" className={`${taille} shrink-0 object-contain`} draggable={false} />
   );

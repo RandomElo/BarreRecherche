@@ -10,24 +10,50 @@ mod demarrage;
 mod floue;
 mod icones;
 mod lancement;
+mod menu_windows;
 mod raccourci;
 mod recents;
 mod recherche;
 mod reglages;
+mod service;
 mod sources;
 mod surveillance;
+mod touche_windows;
 
 use tauri::{Manager, WindowEvent};
 
-/// Démarre le programme. Avec `--fond` (démarrage avec la session), la barre reste cachée.
+/// Démarre le programme. Avec `--fond` (démarrage avec la session), la barre reste cachée ; avec
+/// `--cible=<nom>` (la loupe de Notes : `--cible=notes`), elle s'ouvre avec cette cible posée.
 pub fn lancer() {
-    let en_fond = std::env::args().any(|argument| argument == "--fond");
+    let arguments: Vec<String> = std::env::args().collect();
+    // Lancé par le service de secours après des plantages en boucle : le menu Windows est rendu, rien d'autre.
+    if arguments
+        .iter()
+        .any(|argument| argument == "--rendre-le-menu")
+    {
+        if arguments.iter().any(|argument| argument == "--plantage") {
+            // Appelé à chaque plantage : tant que systemd relance la barre, il n'y a rien à faire ; elle
+            // n'est « en échec » qu'une fois la limite de relances atteinte.
+            std::thread::sleep(std::time::Duration::from_secs(6));
+            if !service::en_echec() {
+                return;
+            }
+            menu_windows::rendre();
+            prevenir_du_plantage();
+        } else {
+            menu_windows::rendre();
+        }
+        return;
+    }
+    let en_fond = arguments.iter().any(|argument| argument == "--fond");
+    let cible = contexte::cible_demandee(&arguments);
 
     tauri::Builder::default()
-        // En premier : un second lancement montre la barre de l'instance déjà là, puis s'arrête.
+        // En premier : un second lancement montre la barre de l'instance déjà là, avec la cible
+        // de `--cible=`, puis s'arrête.
         .plugin(tauri_plugin_single_instance::init(
-            |app, _arguments, _dossier| {
-                barre::montrer(app);
+            |app, arguments, _dossier| {
+                contexte::ouvrir_par_lancement(app, &arguments);
             },
         ))
         // Pages HTML de l'aperçu : seulement des fichiers indexés, seulement pour la barre.
@@ -52,6 +78,7 @@ pub fn lancer() {
             reglages::etat_reglages,
             reglages::definir_demarrage_auto,
             reglages::quitter,
+            reglages::redemarrer,
             recherche::chercher,
             recherche::ouvrir,
             recherche::chercher_sur_le_web,
@@ -68,7 +95,13 @@ pub fn lancer() {
             recherche::rafraichir_en_fond(app.handle());
             surveillance::demarrer(app.handle());
             raccourci::demarrer(app.handle());
+            touche_windows::demarrer(app.handle());
+            // Seulement depuis l'AppImage installée : en développement, le bureau n'est pas touché.
+            if demarrage::appimage().is_some() {
+                std::thread::spawn(preparer_le_bureau);
+            }
             if !en_fond {
+                app.state::<contexte::Contexte>().noter_lancement(cible);
                 barre::montrer(app.handle());
             }
             Ok(())
@@ -85,6 +118,10 @@ pub fn lancer() {
         .build(tauri::generate_context!())
         .expect("échec au démarrage de l'application Tauri")
         .run(|app, evenement| {
+            // La barre s'arrête (Quitter) : le menu Windows de Cinnamon est rendu.
+            if matches!(evenement, tauri::RunEvent::Exit) && demarrage::appimage().is_some() {
+                menu_windows::rendre();
+            }
             // Fermer les réglages ne quitte pas : seul le bouton « Quitter » arrête le programme.
             if let tauri::RunEvent::ExitRequested {
                 code: None, api, ..
@@ -95,4 +132,26 @@ pub fn lancer() {
                 }
             }
         });
+}
+
+/// Au démarrage depuis l'AppImage : la touche Windows est à la barre (le menu de Cinnamon est vidé de
+/// son raccourci), et le démarrage avec la session passe par le service s'il y est déjà ou si
+/// l'ancien fichier `.desktop` est là.
+fn preparer_le_bureau() {
+    menu_windows::liberer();
+    if let (Some(appimage), Some(unites)) = (demarrage::appimage(), service::dossier_unites()) {
+        let autostart = demarrage::dossier_autostart();
+        service::mettre_a_jour(&unites, &appimage, autostart.as_deref());
+    }
+}
+
+/// Notification du bureau quand la barre plante en boucle (le service s'est arrêté).
+fn prevenir_du_plantage() {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Barre de recherche",
+            "La barre de recherche s'arrête en boucle",
+            "Le menu Windows est rendu. Relance-la depuis le menu des applications.",
+        ])
+        .status();
 }

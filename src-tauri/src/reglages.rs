@@ -1,6 +1,6 @@
 //! Fenêtre des réglages, ouverte par l'engrenage de la barre : créée à la demande, détruite à la fermeture.
 
-use crate::{barre, demarrage, raccourci};
+use crate::{barre, demarrage, raccourci, service};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -16,9 +16,10 @@ pub struct EtatReglages {
 }
 
 fn etat(app: &AppHandle) -> EtatReglages {
-    let demarrage_auto = demarrage::appimage()
-        .and(demarrage::dossier_autostart())
-        .map(|dossier| demarrage::est_actif(&dossier));
+    let demarrage_auto = demarrage::appimage().map(|_| {
+        service::dossier_unites().is_some_and(|dossier| service::est_actif(&dossier))
+            || demarrage::dossier_autostart().is_some_and(|dossier| demarrage::est_actif(&dossier))
+    });
     EtatReglages {
         raccourci: raccourci::LIBELLE,
         raccourci_actif: app.state::<raccourci::EtatRaccourci>().actif(),
@@ -37,10 +38,14 @@ pub fn definir_demarrage_auto(app: AppHandle, actif: bool) -> Result<EtatReglage
     else {
         return Err("Le démarrage avec la session se règle depuis l'AppImage.".into());
     };
-    let resultat = if actif {
-        demarrage::activer(&dossier, &appimage)
-    } else {
-        demarrage::desactiver(&dossier)
+    // Par le service de la session (relancé s'il plante) ; sans systemd, l'ancien fichier `.desktop`.
+    let resultat = match (actif, service::dossier_unites()) {
+        (true, Some(unites)) => service::activer(&unites, &appimage, Some(&dossier))
+            .or_else(|_| demarrage::activer(&dossier, &appimage)),
+        (true, None) => demarrage::activer(&dossier, &appimage),
+        (false, unites) => unites
+            .map_or(Ok(()), |unites| service::desactiver(&unites))
+            .and_then(|()| demarrage::desactiver(&dossier)),
     };
     resultat.map_err(|erreur| format!("Réglage non enregistré : {erreur}"))?;
     Ok(etat(&app))
@@ -70,4 +75,32 @@ pub async fn ouvrir_reglages(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn quitter(app: AppHandle) {
     app.exit(0);
+}
+
+/// Relance la barre : par le service s'il l'a lancée, sinon par un nouveau processus lancé une seconde
+/// plus tard (le temps que celui-ci s'arrête). Le menu Windows reste vidé pendant ce temps.
+#[tauri::command]
+pub fn redemarrer() -> Result<(), String> {
+    if service::lance_par_le_service() {
+        return if service::redemarrer() {
+            Ok(())
+        } else {
+            Err("Le service n'a pas pu être relancé.".into())
+        };
+    }
+    let Some(appimage) = demarrage::appimage() else {
+        return Err("Le redémarrage se fait depuis l'AppImage.".into());
+    };
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    // Arguments fixes : le chemin de l'AppImage est passé en paramètre, jamais collé dans le script.
+    Command::new("sh")
+        .args(["-c", "sleep 1; exec \"$0\" --fond", &appimage])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map_err(|erreur| format!("Redémarrage impossible : {erreur}"))?;
+    std::process::exit(0);
 }

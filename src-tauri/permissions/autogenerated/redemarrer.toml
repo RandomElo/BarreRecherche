@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-redemarrer"
+description = "Enables the redemarrer command without any pre-configured scope."
+commands.allow = ["redemarrer"]
+
+[[permission]]
+identifier = "deny-redemarrer"
+description = "Denies the redemarrer command without any pre-configured scope."
+commands.deny = ["redemarrer"]

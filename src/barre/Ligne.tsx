@@ -1,7 +1,7 @@
 import { type MouseEvent } from 'react';
 import { type Resultat } from '../lib/systeme';
 import { IconeResultat } from './icones';
-import { decouper } from './liste';
+import { couperAuMilieu, decouper } from './liste';
 
 interface Props {
   resultat: Resultat;
@@ -33,7 +33,7 @@ export function Ligne({ resultat, active, onChoisir, onSurvoler }: Props) {
         )}
       </span>
       <span className="text-discret max-w-[45%] shrink-0 truncate text-xs" title={resultat.source}>
-        {resultat.source}
+        {couperAuMilieu(resultat.source)}
       </span>
     </li>
   );

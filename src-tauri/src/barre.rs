@@ -39,8 +39,10 @@ pub fn hauteur_bornee(hauteur: f64) -> f64 {
 }
 
 /// Place la barre sur l'écran de la souris, la montre et lui donne le clavier.
+/// Sans appui de touche (lancement du programme), avec l'heure du serveur X. À appeler depuis le
+/// fil principal.
 pub fn montrer(app: &AppHandle) {
-    montrer_a(app, None);
+    montrer_a(app, crate::contexte::heure_du_serveur().ok());
 }
 
 /// Comme `montrer`, avec l'heure X11 de l'appui sur le raccourci : le gestionnaire de fenêtres

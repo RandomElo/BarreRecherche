@@ -1,6 +1,7 @@
 //! `Ctrl+K` contextuel (spécification §2) : le logiciel au premier plan (`_NET_ACTIVE_WINDOW` puis
-//! `WM_CLASS`) décide de la cible posée d'office. Depuis VS Code, `Ctrl+O` dans la barre rend
-//! `Ctrl+K Ctrl+O` à VS Code (XTest).
+//! `WM_CLASS`) n'ouvre la barre sur une cible que depuis Notes (`@notes`) ; depuis VS Code, `Ctrl+O` dans la barre rend
+//! `Ctrl+K Ctrl+O` à VS Code (XTest). Un lancement avec `--cible=<nom>` (la loupe de Notes) ouvre la
+//! barre avec cette cible posée.
 
 use crate::cibles::Cible;
 use serde::Serialize;
@@ -9,10 +10,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
-    AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, Window, KEY_PRESS_EVENT,
-    KEY_RELEASE_EVENT,
+    AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConnectionExt, CreateWindowAux,
+    EventMask, PropMode, Window, WindowClass, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
+use x11rb::protocol::Event;
 
 /// Symboles X11 (XK_Control_L, XK_Control_R, XK_k, XK_o).
 pub const SYMBOLE_CTRL: u32 = 0xffe3;
@@ -97,11 +99,21 @@ pub fn decider_pour(connexion: &impl Connection, racine: Window) -> (Decision, O
     (decision, Some(fenetre))
 }
 
+/// Cible demandée au lancement par `--cible=<nom>` (`--cible=notes` : la loupe de Notes), parmi
+/// les arguments du programme. Un nom inconnu est ignoré.
+pub fn cible_demandee<S: AsRef<str>>(arguments: &[S]) -> Option<Cible> {
+    arguments
+        .iter()
+        .filter_map(|argument| argument.as_ref().strip_prefix("--cible="))
+        .find_map(Cible::depuis_nom)
+}
+
 /// Ouverture de la barre telle que la page la reçoit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ouverture {
-    /// Nom de la cible posée d'office (`vsc`…), sans le `@`.
+    /// Nom de la cible à poser (`notes`…), sans le `@` : celle demandée au lancement, ou `notes`
+    /// pour `Ctrl+K` depuis Notes ; `Ctrl+K` n'en pose aucune ailleurs (demandes d'Eloi).
     cible: Option<&'static str>,
     /// Ouverte depuis VS Code : `Ctrl+O` rend `Ctrl+K Ctrl+O` à VS Code.
     relais: bool,
@@ -121,17 +133,33 @@ pub struct Contexte {
 }
 
 impl Contexte {
-    /// Note l'ouverture par `Ctrl+K` depuis `fenetre`, avec la cible `cible`.
+    /// Note l'ouverture par `Ctrl+K` depuis `fenetre`, au premier plan avec la cible `cible` : seule
+    /// celle de Notes est posée, celle de VS Code sert au relais.
     pub fn noter(&self, cible: Option<Cible>, fenetre: Option<Window>) {
         let depuis_vsc = cible == Some(Cible::Vsc);
-        if let Ok(mut attente) = self.en_attente.lock() {
-            *attente = Some(Ouverture {
-                cible: cible.map(Cible::nom),
-                relais: depuis_vsc,
-            });
-        }
+        self.attendre(Ouverture {
+            cible: cible.filter(|&c| c == Cible::Notes).map(Cible::nom),
+            relais: depuis_vsc,
+        });
         if let Ok(mut vsc) = self.fenetre_vsc.lock() {
             *vsc = fenetre.filter(|_| depuis_vsc);
+        }
+    }
+
+    /// Note l'ouverture par un lancement du programme, avec la cible demandée par `--cible=`.
+    pub fn noter_lancement(&self, cible: Option<Cible>) {
+        self.attendre(Ouverture {
+            cible: cible.map(Cible::nom),
+            relais: false,
+        });
+        if let Ok(mut vsc) = self.fenetre_vsc.lock() {
+            *vsc = None;
+        }
+    }
+
+    fn attendre(&self, ouverture: Ouverture) {
+        if let Ok(mut attente) = self.en_attente.lock() {
+            *attente = Some(ouverture);
         }
     }
 
@@ -159,10 +187,75 @@ impl Contexte {
     }
 }
 
-/// Ce que la page doit poser en s'ouvrant : la cible du logiciel d'où vient `Ctrl+K`, une fois.
+/// Ce que la page doit poser en s'ouvrant (cible demandée au lancement, relais), une fois.
 #[tauri::command]
 pub fn contexte_ouverture(contexte: tauri::State<'_, Contexte>) -> Option<Ouverture> {
     contexte.en_attente.lock().ok().and_then(|mut a| a.take())
+}
+
+/// Second lancement du programme (instance unique) : montre la barre, avec la cible demandée par
+/// `--cible=` ; déjà ouverte, elle reste comme elle est, comme pour `Ctrl+K`.
+pub fn ouvrir_par_lancement(app: &AppHandle, arguments: &[String]) {
+    let cible = cible_demandee(arguments);
+    let pour_la_barre = app.clone();
+    // Le rappel de l'instance unique vient du fil de D-Bus : GTK veut le fil principal.
+    let _ = app.run_on_main_thread(move || {
+        let deja_ouverte = pour_la_barre
+            .get_webview_window(crate::barre::ETIQUETTE)
+            .is_some_and(|f| f.is_visible().unwrap_or(false));
+        if !deja_ouverte {
+            pour_la_barre.state::<Contexte>().noter_lancement(cible);
+        }
+        crate::barre::montrer(&pour_la_barre);
+    });
+}
+
+/// Heure du serveur X, pour demander le clavier sans appui de touche (lancement depuis Notes) : le
+/// gestionnaire de fenêtres refuse le clavier à une fenêtre qui le demande sans heure récente.
+/// Lue sur l'avis d'une propriété changée sur une petite fenêtre jamais montrée.
+pub fn heure_du_serveur() -> Result<u32, String> {
+    let (connexion, numero_ecran) = x11rb::connect(None).map_err(|e| e.to_string())?;
+    let racine = connexion.setup().roots[numero_ecran].root;
+    let fenetre = connexion.generate_id().map_err(|e| e.to_string())?;
+    connexion
+        .create_window(
+            0,
+            fenetre,
+            racine,
+            -1,
+            -1,
+            1,
+            1,
+            0,
+            WindowClass::INPUT_ONLY,
+            0,
+            &CreateWindowAux::new(),
+        )
+        .map_err(|e| e.to_string())?;
+    connexion
+        .change_window_attributes(
+            fenetre,
+            &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE),
+        )
+        .map_err(|e| e.to_string())?;
+    connexion
+        .change_property(
+            PropMode::APPEND,
+            fenetre,
+            AtomEnum::WM_NAME,
+            AtomEnum::STRING,
+            8,
+            0,
+            &[],
+        )
+        .map_err(|e| e.to_string())?;
+    connexion.flush().map_err(|e| e.to_string())?;
+    loop {
+        match connexion.wait_for_event().map_err(|e| e.to_string())? {
+            Event::PropertyNotify(avis) if avis.window == fenetre => return Ok(avis.time),
+            _ => {}
+        }
+    }
 }
 
 /// `Ctrl+O` dans la barre ouverte depuis VS Code : cache la barre, rend le premier plan à VS Code
@@ -363,20 +456,84 @@ mod tests {
     }
 
     #[test]
+    fn cible_demandee_au_lancement() {
+        assert_eq!(
+            cible_demandee(&["/chemin/BarreRecherche.AppImage", "--cible=notes"]),
+            Some(Cible::Notes)
+        );
+        assert_eq!(cible_demandee(&["barre", "--fond"]), None);
+        assert_eq!(cible_demandee::<&str>(&[]), None);
+        // Nom inconnu ou vide, argument sans `=` : pas de cible.
+        assert_eq!(cible_demandee(&["barre", "--cible=inconnue"]), None);
+        assert_eq!(cible_demandee(&["barre", "--cible="]), None);
+        assert_eq!(cible_demandee(&["barre", "--cible", "notes"]), None);
+        // Avec `--fond`, dans n'importe quel ordre.
+        assert_eq!(
+            cible_demandee(&["barre", "--cible=notes", "--fond"]),
+            Some(Cible::Notes)
+        );
+    }
+
+    #[test]
+    fn lancement_pose_sa_cible_sans_relais() {
+        let contexte = Contexte::default();
+        contexte.noter(Some(Cible::Vsc), Some(42));
+        contexte.noter_lancement(Some(Cible::Notes));
+        assert_eq!(
+            contexte_lu(&contexte),
+            Some(Ouverture {
+                cible: Some("notes"),
+                relais: false
+            })
+        );
+        assert_eq!(*contexte.fenetre_vsc.lock().unwrap(), None);
+        contexte.noter_lancement(None);
+        assert_eq!(
+            contexte_lu(&contexte),
+            Some(Ouverture {
+                cible: None,
+                relais: false
+            })
+        );
+    }
+
+    fn contexte_lu(contexte: &Contexte) -> Option<Ouverture> {
+        contexte.en_attente.lock().unwrap().take()
+    }
+
+    #[test]
     fn ouverture_lue_une_seule_fois_et_relais_depuis_vsc() {
         let contexte = Contexte::default();
         contexte.noter(Some(Cible::Vsc), Some(42));
         let ouverture = contexte.en_attente.lock().unwrap().take();
+        // `Ctrl+K` depuis VS Code ne pose pas de cible : seulement le relais.
         assert_eq!(
             ouverture,
             Some(Ouverture {
-                cible: Some("vsc"),
+                cible: None,
                 relais: true
             })
         );
         assert_eq!(*contexte.fenetre_vsc.lock().unwrap(), Some(42));
         contexte.noter(None, Some(7));
         assert_eq!(*contexte.fenetre_vsc.lock().unwrap(), None);
+    }
+
+    #[test]
+    fn ctrl_k_depuis_notes_pose_notes_seulement() {
+        let contexte = Contexte::default();
+        contexte.noter(Some(Cible::Notes), Some(3));
+        assert_eq!(
+            contexte_lu(&contexte),
+            Some(Ouverture {
+                cible: Some("notes"),
+                relais: false
+            })
+        );
+        for autre in [Cible::Terminal, Cible::Firefox] {
+            contexte.noter(Some(autre), Some(3));
+            assert_eq!(contexte_lu(&contexte).and_then(|o| o.cible), None);
+        }
     }
 
     #[test]

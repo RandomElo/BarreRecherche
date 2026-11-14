@@ -27,9 +27,9 @@ export interface Resultat {
   aDesEnfants: boolean;
 }
 
-/** Ouverture par `Ctrl+K` (src-tauri/src/contexte.rs) : cible du logiciel au premier plan. */
+/** Ouverture par `Ctrl+K` ou par un lancement (src-tauri/src/contexte.rs). */
 export interface Ouverture {
-  /** Nom de la cible, sans le `@`. */
+  /** Cible à poser, sans le `@` : demandée au lancement par `--cible=` (la loupe de Notes), ou `notes` pour `Ctrl+K` depuis Notes. */
   cible: string | null;
   /** Ouverte depuis VS Code : `Ctrl+O` rend `Ctrl+K Ctrl+O` à VS Code. */
   relais: boolean;
@@ -90,6 +90,7 @@ export const systeme = {
   etatReglages: () => invoke<EtatReglages>('etat_reglages'),
   definirDemarrageAuto: (actif: boolean) => invoke<EtatReglages>('definir_demarrage_auto', { actif }),
   quitter: () => invoke<void>('quitter'),
+  redemarrer: () => invoke<void>('redemarrer'),
   /** `cibles` : noms sans le `@` (`vsc`, `dossier`…), un logiciel et un genre au plus. */
   /** `dossier` : identifiant du dossier où l'on est entré par → ; `section` : la catégorie choisie. */
   chercher: (saisie: string, cibles: string[], dossier: string | null, section: string | null) =>
@@ -101,7 +102,7 @@ export const systeme = {
   ouvrirSite: (adresse: string) => invoke<void>('ouvrir_site', { adresse }),
   /** Icône d'un résultat, ou d'une cible (`cible:vsc`). */
   icone: (id: string) => invoke<string | null>('icone', { id }),
-  /** Lue une fois à chaque ouverture par `Ctrl+K`, `null` sinon. */
+  /** Lue une fois à chaque ouverture par `Ctrl+K` ou un lancement, `null` sinon. */
   contexteOuverture: () => invoke<Ouverture | null>('contexte_ouverture'),
   relayerCtrlKCtrlO: () => invoke<void>('relayer_ctrl_k_ctrl_o'),
   apercu: (id: string) => invoke<Apercu | null>('apercu', { id }),

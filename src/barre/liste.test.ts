@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decouper, ligneVoisine } from './liste';
+import { couperAuMilieu, decouper, ligneVoisine } from './liste';
 
 describe('decouper', () => {
   it('regroupe les lettres trouvées qui se suivent', () => {
@@ -34,5 +34,20 @@ describe('ligneVoisine', () => {
 
   it('liste vide', () => {
     expect(ligneVoisine(0, 0, 1)).toBe(0);
+  });
+});
+
+describe('couperAuMilieu', () => {
+  it('garde le début et les derniers dossiers', () => {
+    expect(couperAuMilieu('~/Documents/_École/2 BTS CIEL IR/EscapeGame/serveur/api/logs', 32)).toBe('~/…/EscapeGame/serveur/api/logs');
+  });
+
+  it('laisse un emplacement court, ou qui n’est pas un chemin', () => {
+    expect(couperAuMilieu('~/Documents/Rapports', 30)).toBe('~/Documents/Rapports');
+    expect(couperAuMilieu('Notes · Tâches › Claude › un titre très long qui dépasse', 20)).toBe('Notes · Tâches › Claude › un titre très long qui dépasse');
+  });
+
+  it('garde au moins le dernier dossier, même trop long', () => {
+    expect(couperAuMilieu('~/a/b/un-dossier-au-nom-vraiment-trop-long', 10)).toBe('~/…/un-dossier-au-nom-vraiment-trop-long');
   });
 });

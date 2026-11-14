@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mes skills</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f4f1;--carte:#fff;--texte:#1c1b19;--doux:#66625b;--ligne:#e1ded7;--accent:#2f5fd0;--accent-fond:#e6edfb;--auto:#2e7d4f;--auto-fond:#e5f3ea;--survol:#eceae5}
+@media (prefers-color-scheme:dark){:root{--bg:#161513;--carte:#201e1b;--texte:#ece9e3;--doux:#a59f95;--ligne:#37342f;--accent:#8aabf7;--accent-fond:#22304f;--auto:#6cc490;--auto-fond:#1f3227;--survol:#2a2723}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--texte);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:0 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:28px 0 16px}
+h1{font-size:26px;margin:0}
+#compte{color:var(--doux)}
+.outils{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+#q{flex:1;min-width:220px;font:inherit;color:var(--texte);background:var(--carte);border:1px solid var(--ligne);border-radius:12px;padding:12px 16px}
+#q:focus,button:focus-visible,.carte:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filtres{display:flex;gap:6px}
+.filtres button{font:inherit;color:var(--doux);background:transparent;border:1px solid var(--ligne);border-radius:999px;padding:8px 16px;cursor:pointer;white-space:nowrap}
+.filtres button[aria-pressed=true]{background:var(--accent-fond);color:var(--accent);border-color:var(--accent)}
+#liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:stretch}
+.carte{display:flex;flex-direction:column;gap:8px;text-align:left;font:inherit;color:inherit;background:var(--carte);border:1px solid var(--ligne);border-radius:14px;padding:16px 18px;cursor:pointer;min-height:132px}
+.carte:hover{background:var(--survol)}
+.haut{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.nom{font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);overflow-wrap:anywhere}
+.badge{font-size:12px;padding:2px 10px;border-radius:999px;white-space:nowrap;background:var(--accent-fond);color:var(--accent)}
+.badge.auto{background:var(--auto-fond);color:var(--auto)}
+.court{color:var(--doux);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.vide{color:var(--doux);padding:32px 0}
+dialog{width:min(640px,calc(100vw - 32px));max-height:min(80vh,720px);overflow:auto;color:var(--texte);background:var(--carte);border:1px solid var(--ligne);border-radius:16px;padding:24px;margin:auto}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin:0 0 8px;font:600 18px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);overflow-wrap:anywhere}
+dialog p{margin:12px 0;overflow-wrap:anywhere}
+.etiquette{display:block;font-size:13px;color:var(--doux);margin-top:16px}
+.actions{display:flex;gap:8px;margin-top:20px}
+.actions button{font:inherit;border:1px solid var(--ligne);border-radius:10px;padding:8px 16px;cursor:pointer;color:var(--texte);background:var(--carte)}
+.actions button.principal{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.actions button.principal{color:#0f1a33}}
+@media (max-width:560px){body{padding:0 16px 32px}}
+</style>
+</head>
+<body>
+<header><h1>Mes skills</h1><span id="compte"></span></header>
+<div class="outils">
+  <input id="q" type="search" placeholder="Chercher un skill" autocomplete="off" autofocus>
+  <div class="filtres" id="filtres">
+    <button data-f="" aria-pressed="true">Tous</button>
+    <button data-f="manuel" aria-pressed="false">Commandes</button>
+    <button data-f="auto" aria-pressed="false">Automatiques</button>
+  </div>
+</div>
+<div id="liste"></div>
+<dialog id="detail">
+  <h2 id="d-nom"></h2>
+  <span class="badge" id="d-badge"></span>
+  <p id="d-desc"></p>
+  <span class="etiquette" id="d-arg-etiquette">Argument attendu</span>
+  <p id="d-arg"></p>
+  <div class="actions"><button class="principal" id="copier">Copier</button><button id="fermer">Fermer</button></div>
+</dialog>
+<script type="application/json" id="donnees">__DONNEES__</script>
+<script>
+const SKILLS = JSON.parse(document.getElementById("donnees").textContent);
+const $ = id => document.getElementById(id);
+let filtre = "";
+const sansAccent = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const phrase = d => { const m = d.match(/^.*?[.!?](?=\s|$)/); return m ? m[0] : d; };
+function dessiner() {
+  const q = sansAccent($("q").value.trim());
+  const l = SKILLS.filter(s => (!filtre || (filtre === "manuel") === s.m) && (!q || sansAccent(s.n + " " + s.d).includes(q)));
+  $("compte").textContent = l.length + " sur " + SKILLS.length;
+  const zone = $("liste");
+  zone.replaceChildren();
+  if (!l.length) { const v = document.createElement("div"); v.className = "vide"; v.textContent = "Aucun skill ne correspond."; zone.append(v); return; }
+  for (const s of l) {
+    const c = document.createElement("button");
+    c.className = "carte"; c.type = "button";
+    const haut = document.createElement("div"); haut.className = "haut";
+    const nom = document.createElement("span"); nom.className = "nom"; nom.textContent = (s.m ? "/" : "") + s.n;
+    const b = document.createElement("span"); b.className = "badge" + (s.m ? "" : " auto"); b.textContent = s.m ? "Commande" : "Auto";
+    haut.append(nom, b);
+    const court = document.createElement("span"); court.className = "court"; court.textContent = phrase(s.d);
+    c.append(haut, court);
+    c.onclick = () => ouvrir(s);
+    zone.append(c);
+  }
+}
+let courant = null;
+function ouvrir(s) {
+  courant = s;
+  $("d-nom").textContent = (s.m ? "/" : "") + s.n;
+  const b = $("d-badge"); b.textContent = s.m ? "Commande" : "Auto"; b.className = "badge" + (s.m ? "" : " auto");
+  $("d-desc").textContent = s.d;
+  $("d-arg").textContent = s.a || "";
+  $("d-arg").hidden = $("d-arg-etiquette").hidden = !s.a;
+  $("copier").textContent = "Copier /" + s.n;
+  $("detail").showModal();
+}
+$("copier").onclick = async () => {
+  const b = $("copier");
+  try { await navigator.clipboard.writeText("/" + courant.n); b.textContent = "Copié"; } catch (e) { b.textContent = "Copie impossible"; }
+  setTimeout(() => { b.textContent = "Copier /" + courant.n; }, 1500);
+};
+$("fermer").onclick = () => $("detail").close();
+$("detail").addEventListener("click", e => { if (e.target === $("detail")) $("detail").close(); });
+$("q").oninput = dessiner;
+$("filtres").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  filtre = b.dataset.f;
+  document.querySelectorAll("#filtres button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  dessiner();
+};
+document.addEventListener("keydown", e => { if (e.key === "/" && document.activeElement !== $("q") && !$("detail").open) { e.preventDefault(); $("q").focus(); } });
+dessiner();
+</script>
+</body>
+</html>

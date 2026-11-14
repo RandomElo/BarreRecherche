@@ -5,3 +5,5 @@ pub mod applications;
 pub mod fichiers;
 pub mod firefox;
 pub mod notes;
+pub mod skills;
+pub mod vscode;

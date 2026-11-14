@@ -30,3 +30,30 @@ export function ligneVoisine(active: number, total: number, sens: 1 | -1): numbe
   }
   return (active + sens + total) % total;
 }
+
+/** Caractères d'un emplacement qui tiennent à droite d'une ligne. */
+export const LONGUEUR_EMPLACEMENT = 44;
+
+/**
+ * Emplacement coupé au milieu (spécification §6) : le début (`~`) et les derniers dossiers, ceux qui
+ * distinguent deux fichiers de même nom (`~/…/EscapeGame/logs`). Un texte sans `/` reste tel quel.
+ */
+export function couperAuMilieu(emplacement: string, longueur = LONGUEUR_EMPLACEMENT): string {
+  const parties = emplacement.split('/');
+  if (Array.from(emplacement).length <= longueur || parties.length < 3) {
+    return emplacement;
+  }
+  const debut = parties[0]!;
+  const fin: string[] = [];
+  let total = Array.from(debut).length + 2;
+  for (let rang = parties.length - 1; rang > 0; rang--) {
+    const partie = parties[rang]!;
+    const taille = Array.from(partie).length + 1;
+    if (fin.length > 0 && total + taille > longueur) {
+      break;
+    }
+    fin.unshift(partie);
+    total += taille;
+  }
+  return fin.length === parties.length - 1 ? emplacement : `${debut}/…/${fin.join('/')}`;
+}

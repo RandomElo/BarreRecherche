@@ -1,6 +1,6 @@
 [package]
 name = "barre-recherche"
-version = "0.7.18"
+version = "0.7.32"
 description = "Barre de recherche du poste, à la manière de Spotlight"
 edition = "2021"
 publish = false
@@ -21,7 +21,7 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 unicode-normalization = "0.1"
-x11rb = { version = "0.13", features = ["xtest"] }
+x11rb = { version = "0.13", features = ["xtest", "xinput"] }
 
 [dev-dependencies]
 tempfile = "3"

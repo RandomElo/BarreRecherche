@@ -357,7 +357,7 @@ fn attendre_jusqu_a(
 /// Ouvre la barre à la fin de l'attente d'une seconde touche. Juste après la fin de la prise du
 /// clavier, le gestionnaire de fenêtres le laisse à l'ancienne fenêtre : le redemander un instant
 /// après.
-fn ouvrir_barre_et_redonner_le_clavier(
+pub(crate) fn ouvrir_barre_et_redonner_le_clavier(
     app: &AppHandle,
     cible: Option<Cible>,
     fenetre: Option<Window>,
@@ -376,7 +376,12 @@ fn ouvrir_barre_et_redonner_le_clavier(
 
 /// Montre la barre avec la cible du logiciel d'où vient `Ctrl+K` ; déjà ouverte, elle reste comme
 /// elle est.
-fn ouvrir_barre(app: &AppHandle, cible: Option<Cible>, fenetre: Option<Window>, heure: u32) {
+pub(crate) fn ouvrir_barre(
+    app: &AppHandle,
+    cible: Option<Cible>,
+    fenetre: Option<Window>,
+    heure: u32,
+) {
     let pour_la_barre = app.clone();
     let _ = app.run_on_main_thread(move || {
         let deja_ouverte = pour_la_barre

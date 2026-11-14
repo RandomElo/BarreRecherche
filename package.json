@@ -1,6 +1,6 @@
 {
   "name": "barre-recherche",
-  "version": "0.7.18",
+  "version": "0.7.32",
   "private": true,
   "type": "module",
   "description": "Barre de recherche du poste, à la manière de Spotlight",

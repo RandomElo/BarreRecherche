@@ -6,9 +6,11 @@ use crate::sources::applications::{self, Application};
 use crate::sources::fichiers::IndexFichiers;
 use crate::sources::firefox::{self, Page};
 use crate::sources::notes::{self, IconeNote, PageNotes};
+use crate::sources::skills;
+use crate::sources::vscode;
 use crate::{floue, icones, lancement, recents::Recents};
 use serde::Serialize;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, RwLock};
 use tauri::{AppHandle, Manager};
@@ -32,6 +34,47 @@ const PREFIXE_PAGE: &str = "page:";
 /// à qualité de correspondance proche, les sites où Eloi va souvent passent devant.
 const BONUS_FRECENCE: f64 = 4.0;
 const BONUS_MARQUE_PAGE: f64 = 2.0;
+/// Classement (spécification §6) : à correspondance égale, une application passe devant un fichier,
+/// ce qui a été ouvert par la barre remonte, et un fichier rangé hors des dossiers personnels (dans
+/// un outil installé, `~/BurpSuite/…`) passe après les autres.
+const BONUS_APPLICATION: f64 = 3.0;
+const BONUS_RECENT: f64 = 6.0;
+const MALUS_HORS_DOSSIERS_PERSONNELS: f64 = 6.0;
+/// Dossiers personnels, en français et en anglais : un fichier rangé ailleurs dans le dossier
+/// personnel est dans un outil, un cache ou une installation.
+const DOSSIERS_PERSONNELS: [&str; 16] = [
+    "Documents",
+    "Bureau",
+    "Desktop",
+    "Téléchargements",
+    "Downloads",
+    "Images",
+    "Pictures",
+    "Musique",
+    "Music",
+    "Vidéos",
+    "Videos",
+    "Modèles",
+    "Templates",
+    "Public",
+    "Projets",
+    "Projects",
+];
+
+/// Un fichier ou dossier rangé hors des dossiers personnels : sous un dossier du dossier personnel
+/// qui n'en est pas un. Le dossier personnel et ce qu'il contient directement n'en sont pas.
+fn hors_dossiers_personnels(racine: &Path, chemin: &Path) -> bool {
+    let Ok(relatif) = chemin.strip_prefix(racine) else {
+        return false;
+    };
+    let mut composants = relatif.components();
+    match (composants.next(), composants.next()) {
+        (Some(premier), Some(_)) => !DOSSIERS_PERSONNELS
+            .iter()
+            .any(|nom| premier.as_os_str() == *nom),
+        _ => false,
+    }
+}
 
 /// Ce que la barre sait ouvrir. Les projets viendront au J8.
 #[derive(Debug, Clone)]
@@ -51,6 +94,8 @@ pub struct Element {
     normalise: String,
     /// Ajouté au score de la recherche floue (fréquentation d'une page).
     bonus: f64,
+    /// Page d'historique : son domaine normalisé, seul endroit où chercher les mots tapés.
+    domaine: Option<String>,
 }
 
 impl Element {
@@ -71,6 +116,7 @@ impl Element {
             nature,
             normalise,
             bonus,
+            domaine: None,
         }
     }
 
@@ -93,12 +139,18 @@ impl Element {
         if page.marque_page {
             bonus += BONUS_MARQUE_PAGE;
         }
-        Element::nouveau(
-            format!("{PREFIXE_PAGE}{}", page.url),
-            page.titre.clone(),
-            Nature::Page(page),
-            bonus,
-        )
+        let domaine = (!page.marque_page)
+            .then(|| firefox::hote(&page.url).map(floue::normaliser_en_chaine))
+            .flatten();
+        Element {
+            domaine,
+            ..Element::nouveau(
+                format!("{PREFIXE_PAGE}{}", page.url),
+                page.titre.clone(),
+                Nature::Page(page),
+                bonus,
+            )
+        }
     }
 
     /// Page de Notes, cherchée par son titre seulement (spécification §3).
@@ -288,6 +340,12 @@ impl Index {
             .into_iter()
             .map(Element::depuis_application)
             .collect();
+        // « Skills Claude » : page des skills de ~/.claude/skills, réécrite à chaque relecture.
+        if let Some((skills, sortie)) = skills::dossiers() {
+            if let Some(application) = skills::preparer(&skills, &sortie) {
+                elements.push(Element::depuis_application(application));
+            }
+        }
         let pages = self.lire_firefox();
         let frecence_max = pages.iter().map(|p| p.frecence).max().unwrap_or(0);
         elements.extend(
@@ -382,7 +440,8 @@ impl Index {
 
     /// Résultats pour la saisie, toutes sources mêlées par score, réduits à ce que les cibles savent
     /// ouvrir s'il y en a (spécification §4). Avec `@firefox`, les pages passent devant les fichiers.
-    /// Champ vide : les récents encore présents, du plus récent au plus ancien.
+    /// Champ vide : les récents encore présents, du plus récent au plus ancien ; avec une cible
+    /// posée, ce qu'elle ouvre (`parcourir_cibles`).
     pub fn chercher(&self, saisie: &str, cibles: Cibles) -> Vec<Resultat> {
         let garder = |resultat: &Resultat| {
             cibles.accepte(resultat.genre, &resultat.titre)
@@ -393,6 +452,9 @@ impl Index {
         };
         let requete = floue::preparer_saisie(saisie);
         let vide = saisie.trim().is_empty();
+        if vide && cibles.section.is_none() && cibles.posees() {
+            return self.parcourir_cibles(&elements, cibles, garder);
+        }
         if cibles.section == Some("Récents") || (vide && cibles.section.is_none()) {
             let Ok(recents) = self.recents.lock() else {
                 return Vec::new();
@@ -419,13 +481,29 @@ impl Index {
             .split_whitespace()
             .map(String::from)
             .collect();
+        let recents: HashSet<String> = self
+            .recents
+            .lock()
+            .map(|r| r.ids().iter().cloned().collect())
+            .unwrap_or_default();
+        let bonus_recent = |id: &str| {
+            if recents.contains(id) {
+                BONUS_RECENT
+            } else {
+                0.0
+            }
+        };
         let candidats: Vec<&Element> = elements
             .iter()
             .filter(|e| {
                 cibles.accepte(e.genre(), &e.titre)
                     && cibles.dans_la_section(e.groupe())
                     && floue::contient_dans_l_ordre(&requete, &e.normalise)
-                    && (!matches!(e.nature, Nature::Page(_)) || mots_entiers(&mots, &e.normalise))
+                    && match (&e.nature, &e.domaine) {
+                        (Nature::Page(_), Some(domaine)) => mots_entiers(&mots, domaine),
+                        (Nature::Page(_), None) => mots_entiers(&mots, &e.normalise),
+                        _ => true,
+                    }
             })
             .collect();
         // (score, longueur du titre, rang de la source) : même classement que la recherche floue.
@@ -439,8 +517,12 @@ impl Index {
         )
         .into_iter()
         .map(|(element, c)| {
+            let bonus_application = match element.nature {
+                Nature::Application(_) => BONUS_APPLICATION,
+                _ => 0.0,
+            };
             (
-                c.score + element.bonus,
+                c.score + element.bonus + bonus_application + bonus_recent(&element.id),
                 element.titre.chars().count(),
                 0,
                 Resultat::depuis(element, c.positions),
@@ -449,7 +531,8 @@ impl Index {
         .collect();
         if let Ok(fichiers) = self.fichiers.read() {
             if let Some(fichiers) = fichiers.as_ref() {
-                for trouve in fichiers.chercher(&requete, MAXIMUM_RESULTATS) {
+                // Plus de candidats que la limite : le malus et le bonus peuvent encore les reclasser.
+                for trouve in fichiers.chercher(&requete, MAXIMUM_RESULTATS * 4) {
                     let resultat =
                         Resultat::depuis_fichier(&trouve.chemin, trouve.dossier, Vec::new());
                     if !garder(&resultat) {
@@ -458,8 +541,13 @@ impl Index {
                     let positions = floue::correspondance(&requete, &trouve.nom)
                         .map(|c| c.positions)
                         .unwrap_or_default();
+                    let malus = if hors_dossiers_personnels(fichiers.racine(), &trouve.chemin) {
+                        MALUS_HORS_DOSSIERS_PERSONNELS
+                    } else {
+                        0.0
+                    };
                     tous.push((
-                        trouve.score,
+                        trouve.score + bonus_recent(&resultat.id) - malus,
                         trouve.nom.chars().count(),
                         1,
                         Resultat {
@@ -522,18 +610,90 @@ impl Index {
                     .take(MAXIMUM_RESULTATS * 4)
                     .collect()
             }
-            _ => {
-                let Ok(recents) = self.recents.lock() else {
-                    return Vec::new();
-                };
+            // Dossiers, Fichiers : comme une cible posée au champ vide.
+            _ => self.parcourir_cibles(elements, *cibles, garder),
+        }
+    }
+
+    /// Champ vide avec une cible posée (spécification §6) : ce qu'elle ouvre, sans passer par les
+    /// catégories. Avec `@vsc`, les dossiers ouverts récemment dans VS Code d'abord ; puis ses
+    /// récents, les pages de Notes dans l'ordre de Notes, les pages de Firefox par fréquentation,
+    /// enfin le contenu du dossier personnel (dossiers d'abord).
+    fn parcourir_cibles(
+        &self,
+        elements: &[Element],
+        cibles: Cibles,
+        garder: impl Fn(&Resultat) -> bool,
+    ) -> Vec<Resultat> {
+        let recents_vscode = if cibles.logiciel == Some(Cible::Vsc) {
+            vscode::dossier_config()
+                .map(|config| vscode::dossiers_recents(&config))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        self.lister_pour_cibles(elements, cibles, garder, &recents_vscode)
+    }
+
+    fn lister_pour_cibles(
+        &self,
+        elements: &[Element],
+        cibles: Cibles,
+        garder: impl Fn(&Resultat) -> bool,
+        recents_vscode: &[PathBuf],
+    ) -> Vec<Resultat> {
+        // Seulement les dossiers indexés : la barre n'ouvre que ce qu'elle connaît.
+        let mut resultats: Vec<Resultat> = recents_vscode
+            .iter()
+            .filter_map(|dossier| self.fichier(&format!("{PREFIXE_FICHIER}{}", dossier.display())))
+            .map(|(chemin, dossier)| Resultat::depuis_fichier(&chemin, dossier, Vec::new()))
+            .filter(|r| garder(r))
+            .collect();
+        if let Ok(recents) = self.recents.lock() {
+            resultats.extend(
                 recents
                     .ids()
                     .iter()
                     .filter_map(|id| self.resultat_recent(elements, id))
-                    .filter(|r| garder(r))
-                    .collect()
+                    .filter(|r| garder(r)),
+            );
+        }
+        let mut vus: HashSet<String> = HashSet::new();
+        resultats.retain(|r| vus.insert(r.id.clone()));
+        let acceptes = || {
+            elements.iter().filter(|e| {
+                cibles.accepte(e.genre(), &e.titre) && cibles.dans_la_section(e.groupe())
+            })
+        };
+        let notes = acceptes().filter(|e| matches!(e.nature, Nature::Note(_)));
+        let mut pages: Vec<&Element> = acceptes()
+            .filter(|e| matches!(e.nature, Nature::Page(_)))
+            .collect();
+        pages.sort_by_key(|e| match &e.nature {
+            Nature::Page(page) => std::cmp::Reverse(page.frecence),
+            _ => std::cmp::Reverse(0),
+        });
+        let racine = self
+            .fichiers
+            .read()
+            .ok()
+            .and_then(|f| f.as_ref().map(|f| f.racine().to_path_buf()));
+        let dossier_personnel = racine
+            .map(|r| self.enfants(&format!("{PREFIXE_FICHIER}{}", r.display()), "", cibles))
+            .unwrap_or_default();
+        let suite = notes
+            .chain(pages)
+            .map(|e| Resultat::depuis(e, Vec::new()))
+            .chain(dossier_personnel);
+        for resultat in suite {
+            if resultats.len() >= MAXIMUM_RESULTATS * 4 {
+                break;
+            }
+            if vus.insert(resultat.id.clone()) {
+                resultats.push(resultat);
             }
         }
+        resultats
     }
 
     /// Enfants indexés d'un dossier indexé (spécification §6 : `→` sur un dossier), filtrés par la saisie
@@ -716,8 +876,9 @@ pub fn ouvrir_site(adresse: String) -> Result<(), String> {
     lancement::ouvrir_site(&adresse)
 }
 
-/// Pages de Firefox : chaque mot tapé doit s'y trouver d'un seul tenant (titre ou site). Des
-/// milliers de pages d'historique : des lettres éparpillées en trouvaient trop, sans rapport.
+/// Pages de Firefox : chaque mot tapé doit s'y trouver d'un seul tenant (titre ou site d'un
+/// marque-page, domaine seulement pour l'historique). Des milliers de pages d'historique : des
+/// lettres éparpillées, ou un mot pris dans un titre, en trouvaient trop, sans rapport.
 fn mots_entiers(mots: &[String], normalise: &str) -> bool {
     mots.iter().all(|mot| normalise.contains(mot.as_str()))
 }
@@ -1090,7 +1251,13 @@ mod tests {
             logiciel: Some(Cible::Terminal),
             ..Cibles::default()
         };
-        assert!(index.chercher("", terminal).is_empty());
+        // Champ vide : le récent (une application) n'est pas gardé, le dossier personnel l'est.
+        let au_champ_vide: Vec<String> = index
+            .chercher("", terminal)
+            .into_iter()
+            .map(|r| r.titre)
+            .collect();
+        assert_eq!(au_champ_vide, ["Firefox profils", "fiche.pdf", "fiche.txt"]);
         assert_eq!(index.chercher("", Cibles::default()).len(), 1);
     }
 
@@ -1139,6 +1306,110 @@ mod tests {
             mots_cles: vec![firefox::hote(url).unwrap().to_string()],
             frecence,
         }
+    }
+
+    #[test]
+    fn champ_vide_avec_une_cible_donne_ce_qu_elle_ouvre() {
+        let racine = tempfile::tempdir().unwrap();
+        std::fs::create_dir(racine.path().join("Projets")).unwrap();
+        std::fs::write(racine.path().join("cv.pdf"), "x").unwrap();
+        std::fs::write(racine.path().join("note.txt"), "x").unwrap();
+        let index = index_avec(&["Firefox"]);
+        index.remplacer_fichiers(IndexFichiers::construire(racine.path()));
+        let note = |id: &str, titre: &str| {
+            Element::depuis_note(PageNotes {
+                id: id.into(),
+                titre: titre.into(),
+                emplacement: String::new(),
+                fichier: PathBuf::from("/x/page.md"),
+                icone: None,
+                parent: None,
+                a_des_enfants: false,
+            })
+        };
+        index.elements.write().unwrap().extend([
+            note("01a12cf8-f981-789a-bcf1-d2f5b6b17039", "Zèbre"),
+            note("01a12cf8-f981-789a-bcf1-d2f5b6b1703a", "Abeille"),
+            Element::depuis_page(page("Rare", "https://rare.fr/", 1, false), 1),
+            Element::depuis_page(page("Souvent", "https://souvent.fr/", 90, false), 90),
+        ]);
+        let titres = |noms: &[&str]| -> Vec<String> {
+            let noms: Vec<String> = noms.iter().map(|n| n.to_string()).collect();
+            let cibles = Cibles::depuis_noms(&noms).unwrap();
+            index
+                .chercher("", cibles)
+                .into_iter()
+                .map(|r| r.titre)
+                .collect()
+        };
+        // Pages de Notes dans l'ordre de Notes, sans les catégories ni les récents des autres.
+        assert_eq!(titres(&["notes"]), ["Zèbre", "Abeille"]);
+        // Firefox : pages par fréquentation, puis HTML et PDF du dossier personnel.
+        assert_eq!(titres(&["firefox"]), ["Souvent", "Rare", "cv.pdf"]);
+        assert_eq!(titres(&["dossier"]), ["Projets"]);
+        assert_eq!(titres(&["vsc"]), ["Projets"]);
+        assert_eq!(titres(&["fichier"]), ["cv.pdf", "note.txt"]);
+        // Un récent accepté par la cible vient en tête.
+        index
+            .recents
+            .lock()
+            .unwrap()
+            .ajouter("note:01a12cf8-f981-789a-bcf1-d2f5b6b1703a");
+        assert_eq!(titres(&["notes"]), ["Abeille", "Zèbre"]);
+        // `@vsc` : les dossiers récents de VS Code en tête (seulement ceux indexés), puis les autres.
+        let vsc = Cibles::depuis_noms(&["vsc".to_string()]).unwrap();
+        let elements = index.elements.read().unwrap();
+        let avec_vscode: Vec<String> = index
+            .lister_pour_cibles(
+                &elements,
+                vsc,
+                |r| vsc.accepte(r.genre, &r.titre),
+                &[racine.path().join("Projets"), PathBuf::from("/hors/index")],
+            )
+            .into_iter()
+            .map(|r| r.titre)
+            .collect();
+        drop(elements);
+        assert_eq!(avec_vscode, ["Projets"]);
+        // Sans cible, le champ vide donne toujours les récents.
+        assert_eq!(
+            index
+                .chercher("", Cibles::default())
+                .into_iter()
+                .map(|r| r.titre)
+                .collect::<Vec<_>>(),
+            ["Abeille"]
+        );
+    }
+
+    #[test]
+    fn applications_et_dossiers_personnels_devant_les_fichiers_d_outils() {
+        let racine = tempfile::tempdir().unwrap();
+        let outil = racine.path().join("BurpSuite/navigateur");
+        std::fs::create_dir_all(&outil).unwrap();
+        std::fs::write(outil.join("vk_swiftshader.json"), "x").unwrap();
+        std::fs::create_dir_all(racine.path().join("Documents")).unwrap();
+        std::fs::write(racine.path().join("Documents/vk_swiftshader.txt"), "x").unwrap();
+        let index = index_avec(&["Visual Studio"]);
+        index.remplacer_fichiers(IndexFichiers::construire(racine.path()));
+        let titres: Vec<String> = index
+            .chercher("vs", Cibles::default())
+            .into_iter()
+            .map(|r| r.titre)
+            .collect();
+        assert_eq!(
+            titres,
+            ["Visual Studio", "vk_swiftshader.txt", "vk_swiftshader.json"]
+        );
+        assert!(hors_dossiers_personnels(racine.path(), &outil));
+        assert!(!hors_dossiers_personnels(
+            racine.path(),
+            &racine.path().join("Documents/x")
+        ));
+        assert!(!hors_dossiers_personnels(
+            racine.path(),
+            &racine.path().join("BurpSuite")
+        ));
     }
 
     #[test]
@@ -1331,6 +1602,34 @@ mod tests {
         assert_eq!(titres("doc rust"), ["Documentation de Rust"]);
         // Le site compte comme le titre.
         assert_eq!(titres("github"), ["Accueil"]);
+    }
+
+    #[test]
+    fn historique_par_le_domaine_seulement() {
+        let index = index_avec(&[]);
+        index.elements.write().unwrap().extend([
+            Element::depuis_page(
+                page(
+                    "Tarte aux pommes",
+                    "https://www.marmiton.org/tarte",
+                    5,
+                    false,
+                ),
+                50,
+            ),
+            Element::depuis_page(page("Tarte fine", "https://tartes.fr/", 5, true), 50),
+        ]);
+        let titres = |saisie| -> Vec<String> {
+            index
+                .chercher(saisie, Cibles::default())
+                .into_iter()
+                .map(|r| r.titre)
+                .collect()
+        };
+        // Le titre d'une page d'historique ne compte pas, celui d'un marque-page si.
+        assert_eq!(titres("pommes"), Vec::<String>::new());
+        assert_eq!(titres("marmiton"), ["Tarte aux pommes"]);
+        assert_eq!(titres("fine"), ["Tarte fine"]);
     }
 
     #[test]
